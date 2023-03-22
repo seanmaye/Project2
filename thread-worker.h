@@ -18,8 +18,17 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ucontext.h>
+#include <signal.h>
 
 typedef uint worker_t;
+
+enum state {
+	READY, 
+	BLOCKED,
+	RUNNING,
+	TERMINATED
+};
 
 typedef struct TCB {
 	/* add important states in a thread control block */
@@ -31,13 +40,24 @@ typedef struct TCB {
 	// And more ...
 
 	// YOUR CODE HERE
-} tcb; 
+	worker_t tid;
+	enum state state; 
+	ucontext_t context;
+	char* tstack;
+	int priority;
+	int lock; 
+	int contextSwitches;
+
+} TCB; 
 
 /* mutex struct definition */
 typedef struct worker_mutex_t {
 	/* add something here */
 
 	// YOUR CODE HERE
+	TCB  tcb; 
+	int key; // if =0: not intialized, if =1 : initialized
+	
 } worker_mutex_t;
 
 /* define your data structures here: */
@@ -45,6 +65,11 @@ typedef struct worker_mutex_t {
 
 // YOUR CODE HERE
 
+struct node {
+   worker_t thread; //might not need this 
+   TCB tcb; 
+   struct node *next;
+};
 
 /* Function Declarations: */
 
