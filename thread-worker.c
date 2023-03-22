@@ -5,7 +5,6 @@
 // iLab Server:
 
 #include "thread-worker.h"
-
 #define STACK_SIZE SIGSTKSZ
 //Global counter for total context switches and 
 //average turn around and response time
@@ -14,13 +13,14 @@ double avg_turn_time=0;
 double avg_resp_time=0;
 
 struct node *head = NULL;
-
+struct node *running = NULL;
+struct worker_mutex_t *keyHolder = NULL;
 ucontext_t mcontext; 
 ucontext_t scontext;
 
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
-thread_count = 0;
+int thread_count = 0;
 
 void insert(struct TCB tcb) {
    //create a link
@@ -44,12 +44,13 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - allocate space of stack for this thread to run
        // after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
-
+	   //create scheduler context, main context and thread context 
        // YOUR CODE HERE
+	 ucontext_t cctx;	 
 	   void *tstack=malloc(STACK_SIZE);
-	   struct TCB thread1 = {.tid =thread, .state= READY, .context = ' ', .tstack = tstack, .priority = 1};
+	   struct TCB thread1 = {.tid =thread, .state= READY, .context = cctx, .tstack = tstack, .priority = 1};
 	   thread_count ++;
-	   ucontext_t cctx;	   
+	    
 	
 	if (tstack == NULL){
 		perror("Failed to allocate stack");
@@ -72,23 +73,23 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 /* give CPU possession to other user-level worker threads voluntarily */
 int worker_yield() {
-	ucontext_t oldContext; 
-	for(struct node *curr = head; curr!=NULL; curr = curr->next){
-		if(curr->tcb.state == RUNNING){
-			
-			curr->tcb.context = oldContext;
-			curr->tcb.state = READY;
-			break;  
-		}
-	}
-	
-	swapcontext(&oldContext, &scontext);
-
 //find best fit for thread to pass context to 
 	// - change worker thread's state from Running to Ready
 	// - save context of this thread to its thread control block
 	// - switch from thread context to scheduler context
 	// YOUR CODE HERE
+
+
+	// for(struct node *curr = head; curr!=NULL; curr = curr->next){
+	// 	if(curr->tcb.state == RUNNING){
+	// 		curr->tcb.state = READY;
+	// 		swapcontext(&curr->tcb.context, &scontext);
+	// 		break;  
+	// 	}
+	// }
+	running->tcb.state=READY;
+	swapcontext(&running->tcb.context, &scontext);
+	
 	return 0;
 };
 
@@ -116,21 +117,22 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// YOUR CODE HERE
 	struct node *target;
 	for(struct node *curr = head; curr!=NULL; curr = curr->next){
-		if(curr.thread == thread){
+		if(curr->thread == thread){
 			target= curr;
 			break;  
 		}
 	}
-	if(target.tcb.status!='READY' || target.tcb.status!='BLOCKED'){
-		while(target.tcb.status=target.tcb.status!='RUNNING' || target.tcb.status!='BLOCKED'){
-			printf("waiting");
-		}else{
-			target.tcb.status= 'READY';
+	if(target->tcb.state!='READY' || target->tcb.state!='BLOCKED'){
+		while(target->tcb.state=target->tcb.state!='RUNNING' || target->tcb.state!='BLOCKED'){
+			sleep(10); 
+			printf("zzz\n");//problem here this def needs to be changed 
+		}}else{
+			target->tcb.state= 'READY';
 			//the thread that is calling is now READY
 		}
+		return 0;
 	}
-	return 0;
-};
+	
 
 /* initialize the mutex lock */
 int worker_mutex_init(worker_mutex_t *mutex, 
@@ -138,7 +140,13 @@ int worker_mutex_init(worker_mutex_t *mutex,
 	//- initialize data structures for this mutex
 
 	// YOUR CODE HERE
-	mutex = 
+	if(running==NULL){
+		printf("no threads running");
+	}else{	
+		mutex->tcb = running->tcb;
+		mutex->key = 0;
+		printf("hi4");
+	}
 	return 0;
 };
 
@@ -151,6 +159,18 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
         // context switch to the scheduler thread
 
         // YOUR CODE HERE
+		if (keyHolder == NULL){
+			keyHolder = mutex;
+		}
+		else{
+			struct node *curr = head;
+			for(curr; curr!=NULL; curr = curr->next){
+				if(curr->tcb.tid==mutex->tcb.tid){
+					curr->tcb.state='BLOCKED';
+				}
+			}
+			swapcontext(&curr->tcb.context, &scontext);
+		}
         return 0;
 };
 
@@ -159,8 +179,19 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// - release mutex and make it available again. 
 	// - put threads in block list to run queue 
 	// so that they could compete for mutex later.
-
 	// YOUR CODE HERE
+	if (keyHolder == NULL){
+			return 0;
+		}
+		else{
+			struct node *curr = head;
+			for(curr; curr!=NULL; curr = curr->next){
+				if(curr->tcb.tid==mutex->tcb.tid){
+					curr->tcb.state='BLOCKED';
+				}
+			}
+			keyHolder=NULL;
+		}
 	return 0;
 };
 
@@ -168,7 +199,8 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex) {
 	// - de-allocate dynamic memory created in worker_mutex_init
-
+	free(mutex->tcb.tstack);
+	mutex = NULL;
 	return 0;
 };
 
@@ -189,9 +221,9 @@ static void schedule() {
 
 // - schedule policy
 #ifndef MLFQ
-	// Choose PSJF
+	sched_mlfq();
 #else 
-	// Choose MLFQ
+	sched_psjf();
 #endif
 
 }
@@ -202,6 +234,9 @@ static void sched_psjf() {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+	
+	printf("jhi");
+	
 }
 
 
@@ -209,8 +244,9 @@ static void sched_psjf() {
 static void sched_mlfq() {
 	// - your own implementation of MLFQ
 	// (feel free to modify arguments and return types)
-
+	printf("hi2");
 	// YOUR CODE HERE
+	
 }
 
 //DO NOT MODIFY THIS FUNCTION
@@ -224,6 +260,15 @@ void print_app_stats(void) {
 
 
 // Feel free to add any other functions you need
+
+void getRunning( struct node* head){
+	for(struct node *curr = head; curr!=NULL; curr = curr->next){
+		if(curr->tcb.state == RUNNING){
+			running = curr;
+			break;  
+		}
+	}
+}
 
 // YOUR CODE HERE
 
