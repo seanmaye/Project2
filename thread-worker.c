@@ -34,7 +34,50 @@ void insert(struct TCB tcb) {
    //point first to new first node
    head = new;
 }
+/* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
+static void sched_psjf() {
+	// - your own implementation of PSJF
+	// (feel free to modify arguments and return types)
 
+	// YOUR CODE HERE
+	
+	printf("jhi");
+	
+}
+
+
+/* Preemptive MLFQ scheduling algorithm */
+static void sched_mlfq() {
+	// - your own implementation of MLFQ
+	// (feel free to modify arguments and return types)
+	printf("hi2");
+	// YOUR CODE HERE
+	
+}
+
+/* scheduler */
+static void schedule() {
+	// - every time a timer interrupt occurs, your worker thread library 
+	// should be contexted switched from a thread context to this 
+	// schedule() function
+
+	// - invoke scheduling algorithms according to the policy (PSJF or MLFQ)
+
+	// if (sched == PSJF)
+	//		sched_psjf();
+	// else if (sched == MLFQ)
+	// 		sched_mlfq();
+
+	// YOUR CODE HERE
+
+// - schedule policy
+#ifndef MLFQ
+	sched_mlfq();
+#else 
+	sched_psjf();
+#endif
+
+}
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
                       void *(*function)(void*), void * arg) {
@@ -48,7 +91,12 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // YOUR CODE HERE
 	 ucontext_t cctx;	 
 	   void *tstack=malloc(STACK_SIZE);
-	   struct TCB thread1 = {.tid =thread, .state= READY, .context = cctx, .tstack = tstack, .priority = 1};
+	   cctx.uc_link=NULL;
+		cctx.uc_stack.ss_sp=tstack;
+		cctx.uc_stack.ss_size=STACK_SIZE;
+		cctx.uc_stack.ss_flags=0;
+		makecontext(&cctx,(void(*)(void))&function, 1, arg);
+	   struct TCB thread1 = {*thread, READY, cctx,tstack,1,0};
 	   thread_count ++;
 	    
 	
@@ -58,14 +106,11 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	}
 
 	if(head == NULL){
-		mcontext = cctx;
+		getcontext(&mcontext);
+		makecontext(&scontext,(void(*)(void))&schedule,0,NULL);
 	}
       
-		cctx.uc_link=NULL;
-		cctx.uc_stack.ss_sp=tstack;
-		cctx.uc_stack.ss_size=STACK_SIZE;
-		cctx.uc_stack.ss_flags=0;
-		makecontext(&cctx,&function, 1, arg);
+		
 		insert(thread1);
 	
     return 0;
@@ -122,12 +167,12 @@ int worker_join(worker_t thread, void **value_ptr) {
 			break;  
 		}
 	}
-	if(target->tcb.state!='READY' || target->tcb.state!='BLOCKED'){
-		while(target->tcb.state=target->tcb.state!='RUNNING' || target->tcb.state!='BLOCKED'){
+	if(target->tcb.state!=READY || target->tcb.state!=BLOCKED){
+		while(target->tcb.state=target->tcb.state!=RUNNING || target->tcb.state!=BLOCKED){
 			sleep(10); 
 			printf("zzz\n");//problem here this def needs to be changed 
 		}}else{
-			target->tcb.state= 'READY';
+			target->tcb.state= READY;
 			//the thread that is calling is now READY
 		}
 		return 0;
@@ -166,7 +211,7 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
 			struct node *curr = head;
 			for(curr; curr!=NULL; curr = curr->next){
 				if(curr->tcb.tid==mutex->tcb.tid){
-					curr->tcb.state='BLOCKED';
+					curr->tcb.state=BLOCKED;
 				}
 			}
 			swapcontext(&curr->tcb.context, &scontext);
@@ -187,7 +232,7 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 			struct node *curr = head;
 			for(curr; curr!=NULL; curr = curr->next){
 				if(curr->tcb.tid==mutex->tcb.tid){
-					curr->tcb.state='BLOCKED';
+					curr->tcb.state=BLOCKED;
 				}
 			}
 			keyHolder=NULL;
@@ -204,50 +249,8 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
 	return 0;
 };
 
-/* scheduler */
-static void schedule() {
-	// - every time a timer interrupt occurs, your worker thread library 
-	// should be contexted switched from a thread context to this 
-	// schedule() function
-
-	// - invoke scheduling algorithms according to the policy (PSJF or MLFQ)
-
-	// if (sched == PSJF)
-	//		sched_psjf();
-	// else if (sched == MLFQ)
-	// 		sched_mlfq();
-
-	// YOUR CODE HERE
-
-// - schedule policy
-#ifndef MLFQ
-	sched_mlfq();
-#else 
-	sched_psjf();
-#endif
-
-}
-
-/* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
-static void sched_psjf() {
-	// - your own implementation of PSJF
-	// (feel free to modify arguments and return types)
-
-	// YOUR CODE HERE
-	
-	printf("jhi");
-	
-}
 
 
-/* Preemptive MLFQ scheduling algorithm */
-static void sched_mlfq() {
-	// - your own implementation of MLFQ
-	// (feel free to modify arguments and return types)
-	printf("hi2");
-	// YOUR CODE HERE
-	
-}
 
 //DO NOT MODIFY THIS FUNCTION
 /* Function to print global statistics. Do not modify this function.*/
