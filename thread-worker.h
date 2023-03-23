@@ -47,6 +47,7 @@ typedef struct TCB {
 	int priority;
 	int lock; 
 	int contextSwitches;
+	void* retVal;
 
 } TCB; 
 
@@ -69,6 +70,7 @@ struct node {
    worker_t thread; //might not need this 
    TCB tcb; 
    struct node *next;
+   struct node *prev;
 };
 
 /* Function Declarations: */

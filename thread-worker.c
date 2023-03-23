@@ -12,7 +12,7 @@ long tot_cntx_switches=0;
 double avg_turn_time=0;
 double avg_resp_time=0;
 
-struct node *head = NULL;
+struct node **head = NULL;
 struct node *running = NULL;
 struct worker_mutex_t *keyHolder = NULL;
 ucontext_t mcontext; 
@@ -29,21 +29,50 @@ void insert(struct TCB tcb) {
    new->tcb = tcb;
 	
    //point it to old first node
-   new->next = head;
-	
+
+   new->next = (*head);
+   new->prev = NULL;
+   if(*head != NULL ){
+		(*head)->prev=new;
+   }
+   
    //point first to new first node
-   head = new;
+   (*head) = new;
+   
 }
+void remove(struct node *node) {
+   //remove a link, maybe to be used in thread_exit look at code you yoinked maybe
+   if (*head == node)
+        *head = node->next;
+  
+    if (node->next != NULL)
+        node->next->prev = node->prev;
+  
+    
+    if (node->prev != NULL)
+        node->prev->next = node->next;
+  
+    
+    free(node);
+}
+
 /* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
 static void sched_psjf() {
 	// - your own implementation of PSJF
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
-	
-	printf("this is a attempt at a firtst come first serve");
+
 	running = head;
-	setcontext(&running->tcb.context);
+	while(running->tcb.state==TERMINATED){
+		running=running->next;
+	}
+	setcontext(&running->tcb.context);//each thread will call exit so maybe we dont need to do this?
+	printf("this is a attempt at a firtst come first serve");
+	
+	
+	
+	
 	//somehow gotta changed the queue i dont know where 
 	
 }
@@ -116,7 +145,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		makecontext(&scontext,(void(*)(void))&schedule,0,NULL);
 	}
       
-		
+	
 		insert(thread1);
 	
     return 0;
