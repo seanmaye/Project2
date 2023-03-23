@@ -1,7 +1,7 @@
 // File:	thread-worker.c
 
 // List all group member's name:
-// username of iLab:
+// username of iLab: sam710
 // iLab Server:
 
 #include "thread-worker.h"
@@ -41,7 +41,10 @@ static void sched_psjf() {
 
 	// YOUR CODE HERE
 	
-	printf("jhi");
+	printf("this is a attempt at a firtst come first serve");
+	running = head;
+	setcontext(&running->tcb.context);
+	//somehow gotta changed the queue i dont know where 
 	
 }
 
@@ -107,6 +110,9 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 	if(head == NULL){
 		getcontext(&mcontext);
+		scontext.uc_stack.ss_sp= malloc(STACK_SIZE);
+		scontext.uc_stack.ss_size = STACK_SIZE;
+		scontext.uc_link=NULL;
 		makecontext(&scontext,(void(*)(void))&schedule,0,NULL);
 	}
       
@@ -133,6 +139,7 @@ int worker_yield() {
 	// 	}
 	// }
 	running->tcb.state=READY;
+	tot_cntx_switches++;
 	swapcontext(&running->tcb.context, &scontext);
 	
 	return 0;
@@ -147,7 +154,7 @@ void worker_exit(void *value_ptr) {
 	}
 	struct node *current = head;
 	current->tcb.state = TERMINATED;
-	worker_yield();
+	
 	current->next = head;
 	free(current->tcb.tstack);
 };
@@ -160,22 +167,7 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
-	struct node *target;
-	for(struct node *curr = head; curr!=NULL; curr = curr->next){
-		if(curr->thread == thread){
-			target= curr;
-			break;  
-		}
-	}
-	if(target->tcb.state!=READY || target->tcb.state!=BLOCKED){
-		while(target->tcb.state=target->tcb.state!=RUNNING || target->tcb.state!=BLOCKED){
-			sleep(10); 
-			printf("zzz\n");//problem here this def needs to be changed 
-		}}else{
-			target->tcb.state= READY;
-			//the thread that is calling is now READY
-		}
-		return 0;
+	
 	}
 	
 
