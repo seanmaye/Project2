@@ -167,7 +167,40 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
-	
+	 // - wait for a specific thread to terminate
+    // - de-allocate any dynamic memory created by the joining thread
+  
+    // YOUR CODE HERE
+    struct node *current = head;
+    while (current != NULL) {
+        if (current->tcb.tid == thread) {
+            if (current->tcb.state == TERMINATED) {
+                // Deallocate any memory allocated by the terminated thread
+                free(current->tcb.tstack);
+                // Remove the node from the list
+                if (current == head) {
+                    head = current->next;
+                } else {
+                    struct node *prev = head;
+                    while (prev->next != current) {
+                        prev = prev->next;
+                    }
+                    prev->next = current->next;
+                }
+                free(current);
+                return 0;
+            } else {
+                // Wait for the thread to terminate
+                running->tcb.state = 'READY';
+                keyHolder = current;
+                swapcontext(&running->tcb.context, &scontext);
+                break;
+            }
+        }
+        current = current->next;
+    }
+    // The thread with the specified ID was not found
+    return -1;
 	}
 	
 
