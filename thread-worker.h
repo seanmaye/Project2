@@ -40,7 +40,7 @@ typedef struct TCB {
 	// And more ...
 
 	// YOUR CODE HERE
-	worker_t tid;
+	worker_t *tid;
 	enum state state; 
 	ucontext_t context;
 	char* tstack;

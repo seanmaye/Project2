@@ -17,6 +17,7 @@ struct node *running = NULL;
 struct worker_mutex_t *keyHolder = NULL;
 ucontext_t mcontext; 
 ucontext_t scontext;
+ucontext_t t1context;
 
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
@@ -25,9 +26,12 @@ int thread_count = 0;
 void insert(struct TCB tcb) {
    //create a link
    struct node *new = (struct node*) malloc(sizeof(struct node));
-	
    new->tcb = tcb;
-	
+   printf("tcb Context at %p:\n", tcb.context);
+	if(head==NULL){
+		head = &new;
+		return;
+	}
    //point it to old first node
 
    new->next = (*head);
@@ -38,9 +42,9 @@ void insert(struct TCB tcb) {
    
    //point first to new first node
    (*head) = new;
-   
 }
-void remove(struct node *node) {
+
+void removeThread(struct node *node) {
    //remove a link, maybe to be used in thread_exit look at code you yoinked maybe
    if (*head == node)
         *head = node->next;
@@ -63,13 +67,14 @@ static void sched_psjf() {
 
 	// YOUR CODE HERE
 
-	running = head;
+	
 	while(running->tcb.state==TERMINATED){
 		running=running->next;
 	}
 	setcontext(&running->tcb.context);//each thread will call exit so maybe we dont need to do this?
+	printf("running thread address : %p \n",&running);
 	printf("this is a attempt at a firtst come first serve");
-	
+	printf("in psjf");
 	
 	
 	
@@ -82,7 +87,17 @@ static void sched_psjf() {
 static void sched_mlfq() {
 	// - your own implementation of MLFQ
 	// (feel free to modify arguments and return types)
-	printf("hi2");
+	printf("in mlfq\n");
+	running = *(head);
+	
+	printf("running thread address : %p \n",&running->tcb.context);
+	setcontext(&running->tcb.context);
+	printf("swapping from scontext to t1");
+	// swapcontext(&scontext,&running->tcb.context);//each thread will call exit so maybe we dont need to do this?
+	printf("running thread address : %p \n",&running);
+	printf("this is a attempt at a firtst come first serve and we are on thread %i\n",thread_count);	
+	
+	
 	// YOUR CODE HERE
 	
 }
@@ -111,8 +126,8 @@ static void schedule() {
 
 }
 /* create a new thread */
-int worker_create(worker_t * thread, pthread_attr_t * attr, 
-                      void *(*function)(void*), void * arg) {
+int worker_create(worker_t * thread, pthread_attr_t * attr, void
+    *(*function)(void*), void * arg){
 
        // - create Thread Control Block (TCB)
        // - create and initialize the context of this worker thread
@@ -121,19 +136,35 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - make it ready for the execution.
 	   //create scheduler context, main context and thread context 
        // YOUR CODE HERE
-	 ucontext_t cctx;	 
-	   void *tstack=malloc(STACK_SIZE);
-	   cctx.uc_link=NULL;
-		cctx.uc_stack.ss_sp=tstack;
-		cctx.uc_stack.ss_size=STACK_SIZE;
-		cctx.uc_stack.ss_flags=0;
-		makecontext(&cctx,(void(*)(void))&function, 1, arg);
-	   struct TCB thread1 = {*thread, READY, cctx,tstack,1,0};
-	   thread_count ++;
+	 	 
+	   	void *tstack=malloc(STACK_SIZE);
+		if (tstack == NULL){
+		perror("Failed to allocate stack\n");
+		exit(1);
+		}
+		struct TCB thread1;
+		thread1.tid=thread;
+		thread1.state=READY;
+		thread1.tstack=tstack;
+
+		thread1.context.uc_link=NULL;
+		thread1.context.uc_stack.ss_sp=tstack;
+		thread1.context.uc_stack.ss_size=STACK_SIZE;
+		thread1.context.uc_stack.ss_flags=0;
+		getcontext(&thread1.context);
+		makecontext(&thread1.context,(void(*)(void))&function, 1, arg);
+		
+		printf("cctx Context at %p:\n", thread1.context);
+		
+	   	
+		
+	   	thread_count ++;
+		
+		
 	    
 	
 	if (tstack == NULL){
-		perror("Failed to allocate stack");
+		perror("Failed to allocate stack\n");
 		exit(1);
 	}
 
@@ -142,12 +173,21 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		scontext.uc_stack.ss_sp= malloc(STACK_SIZE);
 		scontext.uc_stack.ss_size = STACK_SIZE;
 		scontext.uc_link=NULL;
-		makecontext(&scontext,(void(*)(void))&schedule,0,NULL);
+		getcontext(&scontext);
+		makecontext(&scontext,(void(*)(void))&schedule,0);
+		printf("Main Context at %p:\n", mcontext);
+		printf("Scheduler Context at %p:\n", scontext);
+		printf("scheduler and main context are made \n");
 	}
       
-	
+		
 		insert(thread1);
-	
+		
+		printf("thread context in tcb Context at %p:\n", thread1.context);
+		printf("Scheduler Context at %p:\n", scontext);
+		swapcontext(&mcontext,&thread1.context);
+		printf("thread created in worker create\n");
+		
     return 0;
 };
 
@@ -159,17 +199,10 @@ int worker_yield() {
 	// - switch from thread context to scheduler context
 	// YOUR CODE HERE
 
-
-	// for(struct node *curr = head; curr!=NULL; curr = curr->next){
-	// 	if(curr->tcb.state == RUNNING){
-	// 		curr->tcb.state = READY;
-	// 		swapcontext(&curr->tcb.context, &scontext);
-	// 		break;  
-	// 	}
-	// }
 	running->tcb.state=READY;
 	tot_cntx_switches++;
 	swapcontext(&running->tcb.context, &scontext);
+	printf("swapping from running to scheduler");
 	
 	return 0;
 };
@@ -178,14 +211,20 @@ int worker_yield() {
 void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 	// YOUR CODE HERE
-	if(value_ptr!=NULL){
-		
+	printf("running thread address : %p \n",&running);
+	if(running==NULL){
+		printf("current doesnt exist, no thread is running \n");
+		printf("Scheduler Context at %p:\n", scontext);
 	}
-	struct node *current = head;
-	current->tcb.state = TERMINATED;
+	if(value_ptr!=NULL){
+		struct node *current = running;
+		current->tcb.state = TERMINATED;
+		free(current->tcb.tstack);
+		head = current->next;
+	}
 	
-	current->next = head;
-	free(current->tcb.tstack);
+	setcontext(&scontext);
+	
 };
 
 
@@ -223,6 +262,7 @@ int worker_join(worker_t thread, void **value_ptr) {
                 running->tcb.state = 'READY';
                 keyHolder = current;
                 swapcontext(&running->tcb.context, &scontext);
+				printf("swapping from running to scheduler");
                 break;
             }
         }
