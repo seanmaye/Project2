@@ -9,9 +9,11 @@
 int g = 0;
 
 // The function to be executed by all threads
-void *myThreadFun(void *vargp)
+void myThreadFun()
 {
 	printf("\nim a thread in a function \n");
+	pthread_exit(NULL);
+
 }
 
 int main()
@@ -21,9 +23,11 @@ int main()
 
 	// Let us create three threads
 	for (i = 0; i < 1; i++){
-		pthread_create(&tid, NULL, &myThreadFun, (void *)&tid);
-        printf("created a thread in main! \n");
-        
+		pthread_create(&tid, NULL, &myThreadFun, NULL);
+		worker_yield();
+        printf("created a thread in main!\n");
+    
     }
+	
 	return 0;
 }
