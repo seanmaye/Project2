@@ -1,8 +1,8 @@
 // File:	thread-worker.c
 
-// List all group member's name:
-// username of iLab: sam710
-// iLab Server:
+// List all group member's name:Sean Maye , Andrew San
+// username of iLab: sam710 ars400
+// iLab Server: ilab4
 
 #include "thread-worker.h"
 #define STACK_SIZE SIGSTKSZ
@@ -18,76 +18,84 @@ struct worker_mutex_t *keyHolder = NULL;
 ucontext_t mcontext; 
 ucontext_t scontext;
 ucontext_t t1context;
+struct itimerval timer;
 
 // INITAILIZE ALL YOUR OTHER VARIABLES HERE
 // YOUR CODE HERE
 int thread_count = 0;
 
+// Define an array of run queues
+struct runqueue {
+    struct node *head;
+    int quantum;
+} runqueues[NUM_LVLS] = {
+    {NULL, 25},  
+    {NULL, 50}, 
+    {NULL, 75},
+	{NULL, 100}  
+};
+
 void insert(struct TCB tcb) {
    // create a link
    struct node *new_node = (struct node*) malloc(sizeof(struct node));
    new_node->tcb = tcb;
-   new_node->next = NULL;
-   new_node->prev = NULL;
+ 
+    new_node->next = head;
+    new_node->prev = NULL;
+ 
    
-
-   // add the new node to the list
-   if (head == NULL) {
-      // the list is empty, so make this node the head
-      head = new_node;
-   } else {
-      // traverse the list to find the last node
-      struct node *last = head;
-      while (last->next != NULL) {
-         last = last->next;
-      }
-      // add the new node after the last node
-      last->next = new_node;
-      new_node->prev = last;
-   }
+    if (head != NULL)
+        head->prev = new_node;
+ 
+    
+    head = new_node;
 }
 
 
 
 /* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
 static void sched_psjf() {
-	// - your own implementation of PSJF
-	// (feel free to modify arguments and return types)
+   // find the thread with the shortest expected processing time
+   struct node *current = head;
+   if (head == NULL) exit;
 
-	// YOUR CODE HERE
-
-	
-	while(running->tcb.state==TERMINATED){
-		running=running->next;
+   struct node *shortest = head;
+	for(current ; current->next != NULL; current = current->next){
+		if (current->tcb.quantums < shortest->tcb.quantums) shortest = current;
 	}
-	setcontext(&running->tcb.context);//each thread will call exit so maybe we dont need to do this?
-	printf("running thread address : %p \n",&running);
-	printf("this is a attempt at a firtst come first serve");
-	printf("in psjf");
-	
-	
-	
-	//somehow gotta changed the queue i dont know where 
-	
+	setitimer(ITIMER_PROF, &timer, NULL);
+	current->tcb.state = RUNNING;
+	running=current;
+	tot_cntx_switches++;
+	swapcontext(&scontext,&current->tcb.context);
 }
+
 
 
 /* Preemptive MLFQ scheduling algorithm */
 static void sched_mlfq() {
-	// - your own implementation of MLFQ
-	// (feel free to modify arguments and return types)
-	printf("in mlfq\n");
-	running = (head);
-	
-	printf("running thread address : %p \n",&running->tcb.context);
-	setcontext(&running->tcb.context);
-	printf("swapping from scontext to t1");
-	// swapcontext(&scontext,&running->tcb.context);//each thread will call exit so maybe we dont need to do this?
-	printf("running thread address : %p \n",&running);
-	printf("this is a attempt at a firtst come first serve and we are on thread %i\n",thread_count);	
-	
-	
 	// YOUR CODE HERE
+	// Run the highest priority queue with non-empty threads
+    for (int i = 0; i < NUM_LVLS; i++) {
+		for(struct node *curr = head; curr->next!=NULL;curr = curr->next){
+			struct node *temp = head;
+			struct node *last = head;
+			head = head-> next;
+			for(last; last!=NULL;last = last->next){
+
+			}
+			last->next=temp;			 
+            setitimer(ITIMER_PROF, &(struct itimerval){.it_value = {0, runqueues[i].quantum * 1000}}, NULL);
+            curr->tcb.state = RUNNING;	
+			tot_cntx_switches++;		
+            swapcontext(&scontext, &curr->tcb.context);
+        }
+    }
+    
+    // If all queues are empty, exit
+    exit(0);
+    
+	
 	
 }
 
@@ -119,14 +127,12 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
     // Create a TCB for the new thread
     TCB *new_tcb = (TCB*) malloc(sizeof(TCB));
     if (new_tcb == NULL) {
-        perror("Failed to allocate memory for TCB");
         return -1;
     }
     
     // Allocate a new stack for the new thread
     new_tcb->tstack = (char*) malloc(STACK_SIZE);
     if (new_tcb->tstack == NULL) {
-        perror("Failed to allocate memory for thread stack");
         free(new_tcb);
         return -1;
     }
@@ -153,16 +159,12 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
 		scontext.uc_link=NULL;
 		getcontext(&scontext);
 		makecontext(&scontext,(void(*)(void))&schedule,0);
-		printf("Main Context at %p:\n", mcontext);
-		printf("Scheduler Context at %p:\n", scontext);
-		printf("tcbnew Context at %p:\n", new_tcb->context);
-		printf("scheduler and main context are made \n");
+		timerSet();
 	}
-
+	
     // Add the new TCB to the end of the linked list of TCBs
     struct node *new_node = (struct node*) malloc(sizeof(struct node));
     if (new_node == NULL) {
-        perror("Failed to allocate memory for linked list node");
         free(new_tcb->tstack);
         free(new_tcb);
         return -1;
@@ -184,7 +186,8 @@ int worker_create(worker_t *thread, pthread_attr_t *attr, void *(*function)(void
         new_node->prev = current;
     }
 	insert(*new_tcb);
-    swapcontext(&mcontext,&new_tcb->context);
+	tot_cntx_switches++;
+    setcontext(&scontext);
     return 0;
 }
 
@@ -196,10 +199,11 @@ int worker_yield() {
 	// - save context of this thread to its thread control block
 	// - switch from thread context to scheduler context
 	// YOUR CODE HERE
-	printf("Scheduler Context at %p:\n", scontext);
-	running=head;
+	
+	
 	running->tcb.state=READY;
 	tot_cntx_switches++;
+	running->tcb.quantums++;
 	swapcontext(&running->tcb.context, &scontext);
 	
 	return 0;
@@ -209,21 +213,30 @@ int worker_yield() {
 void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 	// YOUR CODE HERE
-	printf("running thread address : %p \n",&running);
-	running=head;
-	if(running==NULL){
-		printf("current doesnt exist, no thread is running \n");
-		printf("Scheduler Context at %p:\n", scontext);
+	
+	
+	if((running==NULL)||(running->tcb.state==TERMINATED)){
+		
+		print_app_stats();
 		setcontext(&mcontext);
-	}
-	if(value_ptr!=NULL){
-		struct node *current = running;
-		current->tcb.state = TERMINATED;
-		free(current->tcb.tstack);
-		head = current->next;
+		
 	}
 	
-	setcontext(&mcontext);
+		running->tcb.state = TERMINATED;
+		free(running->tcb.tstack);
+		/*if(running!=NULL){
+			head = running->next;
+		}else{
+			//call main context becasue all threads have run?
+			print_app_stats();
+		}*/
+		
+	
+	if(value_ptr!=NULL){
+		running->tcb.retVal=value_ptr;
+	}
+	tot_cntx_switches++;
+	setcontext(&scontext);
 	
 };
 
@@ -239,35 +252,34 @@ int worker_join(worker_t thread, void **value_ptr) {
     // - de-allocate any dynamic memory created by the joining thread
   
     // YOUR CODE HERE
-    struct node *current = head;
-	printf("inside worker_join\n");
-    while (current != NULL) {
-        if (current->tcb.tid == thread) {
-            if (current->tcb.state == TERMINATED) {
+    while (running != NULL) {
+        if (running->tcb.tid == thread) {
+            if (running->tcb.state == TERMINATED) {
                 // Deallocate any memory allocated by the terminated thread
-                free(current->tcb.tstack);
+                free(running->tcb.tstack);
                 // Remove the node from the list
-                if (current == head) {
-                    head = current->next;
+                if (running == head) {
+                    head = running->next;
                 } else {
                     struct node *prev = head;
-                    while (prev->next != current) {
+                    while (prev->next != running) {
                         prev = prev->next;
                     }
-                    prev->next = current->next;
+                    prev->next = running->next;
                 }
-                free(current);
+                free(running);
                 return 0;
             } else {
                 // Wait for the thread to terminate
-                running->tcb.state = 'READY';
-                keyHolder = current;
+                running->tcb.state = BLOCKED;
+                keyHolder = running;
+				tot_cntx_switches++;
                 swapcontext(&running->tcb.context, &scontext);
-				printf("swapping from running to scheduler");
+				
                 break;
             }
         }
-        current = current->next;
+        running = running->next;
     }
     // The thread with the specified ID was not found
     return -1;
@@ -281,14 +293,31 @@ int worker_mutex_init(worker_mutex_t *mutex,
 
 	// YOUR CODE HERE
 	if(running==NULL){
-		printf("no threads running");
+		
 	}else{	
 		mutex->tcb = running->tcb;
 		mutex->key = 0;
-		printf("hi4");
+		
 	}
 	return 0;
 };
+
+void insertQueue(struct TCB tcb, struct node* queuehead) {
+   // create a link
+   struct node *new_node = (struct node*) malloc(sizeof(struct node));
+   new_node->tcb = tcb;
+ 
+    new_node->next = queuehead;
+    new_node->prev = NULL;
+ 
+   
+    if (queuehead != NULL)
+        queuehead->prev = new_node;
+ 
+    
+    queuehead = new_node;
+   }
+
 
 /* aquire the mutex lock */
 int worker_mutex_lock(worker_mutex_t *mutex) {
@@ -299,18 +328,15 @@ int worker_mutex_lock(worker_mutex_t *mutex) {
         // context switch to the scheduler thread
 
         // YOUR CODE HERE
-		if (keyHolder == NULL){
-			keyHolder = mutex;
+		// new version with test and set 
+		mutex->tcb=running->tcb;
+		while(__sync_lock_test_and_set(&(mutex->key),1)){
+			insertQueue(running->tcb,mutex->head);
+			running->tcb.state=BLOCKED;
+			tot_cntx_switches++;
+			swapcontext(&running->tcb.context, &scontext);
 		}
-		else{
-			struct node *curr = head;
-			for(curr; curr!=NULL; curr = curr->next){
-				if(curr->tcb.tid==mutex->tcb.tid){
-					curr->tcb.state=BLOCKED;
-				}
-			}
-			swapcontext(&curr->tcb.context, &scontext);
-		}
+		
         return 0;
 };
 
@@ -320,19 +346,18 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// - put threads in block list to run queue 
 	// so that they could compete for mutex later.
 	// YOUR CODE HERE
-	if (keyHolder == NULL){
-			return 0;
+	//new version with queue
+	if(mutex->tcb.tid!=running->tcb.tid){
+		return;
+	}else{
+		for(struct node *head; head!=NULL; head=head->next){
+			head->tcb.state=READY;
+			insert(head->tcb);
 		}
-		else{
-			struct node *curr = head;
-			for(curr; curr!=NULL; curr = curr->next){
-				if(curr->tcb.tid==mutex->tcb.tid){
-					curr->tcb.state=BLOCKED;
-				}
-			}
-			keyHolder=NULL;
-		}
-	return 0;
+		tot_cntx_switches++;
+		setcontext(&scontext);
+	}
+	
 };
 
 
@@ -370,3 +395,40 @@ void getRunning( struct node* head){
 
 // YOUR CODE HERE
 
+void timerSignalHandler(int signum){
+	//check if we are in sched
+	ucontext_t currentContext;
+	
+	getcontext(&currentContext);
+	if(&currentContext==&scontext){
+		
+
+	}else{
+		setcontext(&scontext);
+	}
+}
+
+void timerSet(){
+	struct sigaction sa;
+	memset (&sa, 0, sizeof (sa));
+	sa.sa_handler = &timerSignalHandler;
+	sigaction (SIGPROF, &sa, NULL);
+
+	// Create timer struct
+	
+
+	// Set up what the timer should reset to after the timer goes off
+	timer.it_interval.tv_usec = (QUANTUM*1000)%1000000; 
+	timer.it_interval.tv_sec = QUANTUM/1000;
+	// Set up the current timer to go off in 1 second
+	// Note: if both of the following values are zero
+	//       the timer will not be active, and the timer
+	//       will never go off even if you set the interval value
+	timer.it_value.tv_usec = (QUANTUM*1000)%1000000; 
+	timer.it_value.tv_sec = QUANTUM/1000;
+
+	// Set the timer up (start the timer)
+	
+	setitimer(ITIMER_PROF, &timer, NULL);
+	
+}

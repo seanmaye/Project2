@@ -1,8 +1,8 @@
 // File:	worker_t.h
 
-// List all group member's name:
-// username of iLab:
-// iLab Server:
+// List all group member's name:Sean Maye , Andrew San
+// username of iLab: sam710 ars400
+// iLab Server: ilab4
 
 #ifndef WORKER_T_H
 #define WORKER_T_H
@@ -11,7 +11,8 @@
 
 /* To use Linux pthread Library in Benchmark, you have to comment the USE_WORKERS macro */
 #define USE_WORKERS 1
-
+#define QUANTUM 10 
+#define NUM_LVLS 4
 /* include lib header files that you need here: */
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -20,6 +21,8 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <signal.h>
+#include <sys/time.h>
+
 
 typedef uint worker_t;
 
@@ -48,6 +51,7 @@ typedef struct TCB {
 	int lock; 
 	int contextSwitches;
 	void* retVal;
+	int quantums; 
 
 } TCB; 
 
@@ -58,6 +62,7 @@ typedef struct worker_mutex_t {
 	// YOUR CODE HERE
 	TCB  tcb; 
 	int key; // if =0: not intialized, if =1 : initialized
+	struct node* head;
 	
 } worker_mutex_t;
 
